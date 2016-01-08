@@ -1,0 +1,178 @@
+#!/usr/bin/python
+
+#import telescope
+import sys
+from PyQt4 import QtCore, QtGui
+from optparse import OptionParser
+
+import conf_uiform
+import callback
+import time
+import datetime
+import numpy as np 
+
+__author__ = 'R. Luo & K.J.Lee'
+
+getdat=[]
+
+rad=np.pi/180.0
+deg=180.0/np.pi
+
+class Apptt(QtGui.QMainWindow):
+    def __init__(self,parent=None):
+        QtGui.QWidget.__init__(self,parent)
+        self.loginGui()
+    
+    def loginGui(self):
+        self.ui = conf_uiform.Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.scene = QtGui.QGraphicsScene()
+        self.scene.addPixmap(QtGui.QPixmap('radio-telescope-icon.gif'))
+        self.ui.graphicsView_Cablewrap.setScene(self.scene) 
+        timer = QtCore.QTimer(self)
+        timer.timeout.connect(self.showTime)
+        timer.start(1000)
+
+        self.connect(self.ui.actionLoad_Schedule,QtCore.SIGNAL('triggered()'),self.Load_Schedule)
+        self.connect(self.ui.toolButton_Start,QtCore.SIGNAL('clicked()'),self.ButtonStart_OnClick)
+        self.connect(self.ui.toolButton_Stop,QtCore.SIGNAL('clicked()'),self.ButtonStop_OnClick)
+        self.show()
+    
+    def showTime(self):
+        utc=datetime.datetime.utcnow()
+        Y=utc.year
+        M=utc.month
+        D=utc.day
+        h=utc.hour
+        m=utc.minute
+        s=utc.second
+        self.ui.label_UTC.setText(utc.strftime('  %Y/%m/%d %H:%M:%S'))
+        mjd=callback.MJDdisplay(Y,M,D,h,m,s)
+        self.ui.label_MJD.setText(mjd)
+        lst=callback.LSTdisplay(Y,M,D,h,m,s)
+        self.ui.label_LST.setText(lst)
+        #if self.tableView_Click()!=(0,0):
+        ra=self.tableView_Click()[0]
+        dec=self.tableView_Click()[1]
+        self.ui.label_AZ.setText(callback.Hordisplay(Y,M,D,h,m,s,ra,dec)[0])
+        self.ui.label_EL.setText(callback.Hordisplay(Y,M,D,h,m,s,ra,dec)[1])
+        self.ui.textBrowser_CurrentPos.setText(callback.Posdisplay(Y,M,D,h,m,s,ra,dec))
+        self.ui.label_RLST.setText(callback.RStimedisplay(Y,M,D,h,m,s,ra,dec)[0])
+        self.ui.label_SLST.setText(callback.RStimedisplay(Y,M,D,h,m,s,ra,dec)[1])
+        self.ui.label_RRemains.setText(callback.RStimerdisplay(Y,M,D,h,m,s,ra,dec)[0])
+        self.ui.label_SRemains.setText(callback.RStimerdisplay(Y,M,D,h,m,s,ra,dec)[1])
+
+    def Load_Schedule(self):
+        InputName = QtGui.QFileDialog.getOpenFileName(self, 'Load Scheduel File', '.')
+        fname = open(InputName, 'r')
+        with fname:
+            InputData = fname.readlines()
+            for line in InputData:
+                newline = line.split()
+                getdat.append(newline)
+        cpydat = getdat
+        
+        x = len(cpydat)
+        for i in range (1,x):          
+            ra_j = ':'.join(cpydat[i][2:5])
+            dec_j = ':'.join(cpydat[i][5:8])
+            del cpydat[i][2:8]
+            cpydat[i].insert(2,ra_j)
+            cpydat[i].insert(3,dec_j)
+        
+        tablemodel = MyTableModel(getdat)
+        self.ui.tableView_Schedule.setModel(tablemodel)
+        self.ui.tableView_Schedule.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+        self.ui.tableView_Schedule.clicked.connect(self.tableView_Click)
+    
+    @QtCore.pyqtSlot(QtCore.QModelIndex)
+    def tableView_Click(self):
+        itms = self.ui.tableView_Schedule.selectedIndexes()
+        for it in itms:
+            row_num=it.row()
+        ra=getdat[row_num][2].split(':')
+        dec=getdat[row_num][3].split(':')
+        ra=float(ra[0])+float(ra[1])/60.0+float(ra[2])/3600.0
+        if float(dec[0])<0:
+            dec=float(dec[0])-float(dec[1])/60.0-float(dec[2])/3600.0
+        else:
+            dec=float(dec[0])+float(dec[1])/60.0+float(dec[2])/3600.0
+        #self.ui.label_RLST.setText(callback.RStimedisplay(ra,dec)[0])
+        #self.ui.label_SLST.setText(callback.RStimedisplay(ra,dec)[1])
+        ra=ra*15*rad
+        dec=dec*rad
+        return ra,dec
+
+    def ButtonStart_OnClick(self):
+        callback.start()
+    
+    def ButtonStop_OnClick(self):
+        callback.stop()
+
+class MyTableModel(QtCore.QAbstractTableModel):
+    def __init__(self,datain):
+        QtCore.QAbstractTableModel.__init__(self)
+        self.header_labels = datain[0]
+        del datain[0]
+        self.arraydata = datain
+  
+    def rowCount(self, parent):
+        return len(self.arraydata)
+    
+    def columnCount(self, parent):
+        count_col = []
+        x = len(self.arraydata)
+        for i in range(x):
+            count_col.append(len(self.arraydata[i]))
+        return max(count_col)
+    '''
+    def headerData(self, col, orientation, role):
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+            return QtCore.QVariant(self.headerdata[col])
+        return QtCore.QVariant()    
+    '''
+    def headerData(self, col, orientation, role=QtCore.Qt.DisplayRole):
+        if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
+            return self.header_labels[col]
+        return QtCore.QAbstractTableModel.headerData(self, col, orientation, role)
+
+    def data(self, index, role):
+        if not index.isValid():
+            return QtCore.QVariant()
+        elif role != QtCore.Qt.DisplayRole:
+            return QtCore.QVariant()
+        return QtCore.QVariant(self.arraydata[index.row()][index.column()]) 
+
+def main():
+    #Get the system options
+    usage = "usage: %prog [options]"
+    parser = OptionParser(usage=usage, version="%prog 1.0")
+    parser.add_option("-v", "--verbose",
+                      action="store_true", dest="verbose", default=True,
+                      help="output reports on terminal [default]")
+    parser.add_option("-q", "--quiet",
+                      action="store_false", dest="verbose",
+                      help="quiet the outputs")
+    parser.add_option("-f", "--filename",
+                      metavar="FILE", help="configuration files", default="configu.txt")
+    parser.add_option("-l", "--log",
+                      metavar="LOGFILE", help="log files", default="log.txt")
+    parser.add_option("-m", "--mode",
+                      default="pulsar",
+                      help="pulsar spectral_line etc")
+    (System_Options, args) = parser.parse_args()
+    if System_Options.verbose:
+        print 'cmd options are'
+        print System_Options
+
+    #start the GUI and a timer. For every 2 seconds, check the telescope status, observing time running, pointing etc
+    app = QtGui.QApplication(sys.argv)
+    myqq = Apptt()
+    sys.exit(app.exec_())
+ 
+
+if __name__ == "__main__":
+    main()
+
+
+

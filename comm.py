@@ -1,0 +1,2 @@
+class communication(object):
+	
