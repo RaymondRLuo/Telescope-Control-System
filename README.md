@@ -5,6 +5,9 @@ This is an example of TCS UI.
 
 ![TCS UI](tcs_ui.png)
 
+## Dependencies
+### Qt4, PyQt4, Numpy, Scipy
+
 ## Launch:
 
 $ ./Tcr_system
