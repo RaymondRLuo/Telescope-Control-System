@@ -9,5 +9,6 @@ This is an example of TCS UI.
 ### Qt4, PyQt4, Numpy, Scipy
 
 ## Launch:
-
-$ ./Tcr_system
+```
+ ./Tcr_system
+```
